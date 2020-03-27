@@ -25,7 +25,8 @@ class BlenderGlTF():
     @staticmethod
     def create(gltf):
         """Create glTF main method, with optional profiling"""
-        profile = bpy.app.debug_value == 102
+        print("Creating glTF")
+        profile = True
         if profile:
             import cProfile, pstats, io
             from pstats import SortKey

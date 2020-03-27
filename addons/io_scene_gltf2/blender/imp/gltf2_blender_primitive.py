@@ -15,7 +15,7 @@
 import bpy
 from mathutils import Vector, Matrix
 import numpy as np
-# import time
+import time
 
 from .gltf2_blender_material import BlenderMaterial
 from ...io.imp.gltf2_io_binary import BinaryData
@@ -208,7 +208,7 @@ class BlenderPrimitive():
                 colors = np.concatenate((colors, ones), axis=1) # add alpha channel
 
             srgb_colors = color_linear_to_srgb(colors)
-            # t = time.perf_counter()
+            t = time.perf_counter()
             # This needs to be a tight loop because it runs over all vertices,
             # which is why this code looks a little odd.
             for bidx, pidx in vert_idxs:
@@ -216,7 +216,7 @@ class BlenderPrimitive():
                 col = (color[0], color[1], color[2], color[3]) # fastest this way
                 for loop in bme_verts[bidx].link_loops:
                     loop[layer] = col
-            # print(f'store colors: {time.perf_counter() - t}')
+            print(f'store colors ({is_rgba and "rgba" or "rgb"}, {len(vert_idxs)} verts, {len(colors_raw)} colors): {time.perf_counter() - t}')
 
             set_num += 1
 
