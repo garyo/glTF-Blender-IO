@@ -14,6 +14,8 @@
 
 import struct
 import base64
+import numpy as np
+import time
 
 from ..com.gltf2_io import Accessor
 
@@ -59,13 +61,13 @@ class BinaryData():
         return buffer[byte_offset:byte_offset + buffer_view.byte_length]
 
     @staticmethod
-    def get_data_from_accessor(gltf, accessor_idx, cache=False):
+    def get_data_from_accessor(gltf, accessor_idx, cache=False, use_numpy=False):
         """Get data from accessor."""
         if accessor_idx in gltf.accessor_cache:
             return gltf.accessor_cache[accessor_idx]
 
         accessor = gltf.data.accessors[accessor_idx]
-        data = BinaryData.get_data_from_accessor_obj(gltf, accessor)
+        data = BinaryData.get_data_from_accessor_obj(gltf, accessor, use_numpy)
 
         if cache:
             gltf.accessor_cache[accessor_idx] = data
@@ -73,7 +75,8 @@ class BinaryData():
         return data
 
     @staticmethod
-    def get_data_from_accessor_obj(gltf, accessor):
+    def get_data_from_accessor_obj(gltf, accessor, use_numpy=False):
+        t = time.perf_counter()
         if accessor.buffer_view is not None:
             bufferView = gltf.data.buffer_views[accessor.buffer_view]
             buffer_data = BinaryData.get_buffer_view(gltf, accessor.buffer_view)
@@ -102,11 +105,24 @@ class BinaryData():
             stride = bufferView.byte_stride or default_stride
 
             # Decode
-            unpack_from = struct.Struct(fmt).unpack_from
-            data = [
-                unpack_from(buffer_data, offset)
+            print(f'get_data_from_accessor_obj: use_numpy={use_numpy}, count={accessor.count}x{component_nb}, fmt={fmt}, {component_nb} comp, stride={stride}, sparse={accessor.sparse}, norm={accessor.normalized}')
+            if use_numpy and fmt_char in ('f', 'H') and \
+               (not bufferView.byte_stride or bufferView.byte_stride == default_stride) and \
+               not accessor.sparse and not accessor.normalized:
+                # This is no faster than the unpack_from way, but it directly
+                # returns a np.array to avoid a copy later.
+                if fmt_char == 'f':
+                    dtype = np.dtype(np.float32).newbyteorder('<')
+                else:
+                    dtype = np.dtype(np.uint16).newbyteorder('<')
+                data = np.frombuffer(buffer_data, dtype, accessor.count * component_nb, 0)
+                data.shape = (accessor.count, component_nb)
+            else:
+                unpack_from = struct.Struct(fmt).unpack_from
+                data = [
+                    unpack_from(buffer_data, offset)
                 for offset in range(0, accessor.count*stride, stride)
-            ]
+                ]
 
         else:
             # No buffer view; initialize to zeros
@@ -155,6 +171,7 @@ class BinaryData():
                         new_tuple += (float(i),)
                 data[idx] = new_tuple
 
+        print(f'get_data_from_accessor_obj: {time.perf_counter() - t} sec')
         return data
 
     @staticmethod

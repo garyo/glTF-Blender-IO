@@ -45,12 +45,15 @@ class BlenderPrimitive():
             pyprimitive.num_faces = 0
             return
 
-        positions = BinaryData.get_data_from_accessor(gltf, attributes['POSITION'], cache=True)
+        positions = BinaryData.get_data_from_accessor(gltf, attributes['POSITION'], cache=True, use_numpy=True)
 
         if pyprimitive.indices is not None:
             # Not using cache, this is not useful for indices
-            indices = BinaryData.get_data_from_accessor(gltf, pyprimitive.indices)
-            indices = [i[0] for i in indices]
+            indices = BinaryData.get_data_from_accessor(gltf, pyprimitive.indices, use_numpy=True)
+            if type(indices) == np.ndarray:
+                indices = indices[:,0]
+            else:
+                indices = [i[0] for i in indices]
         else:
             indices = list(range(len(positions)))
 
@@ -120,7 +123,11 @@ class BlenderPrimitive():
 
         # The pidx of all the vertices that are actually used by the primitive (only
         # indices that appear in the pyprimitive.indices list are actually used)
-        used_pidxs = set(indices)
+        if type(indices) == np.ndarray:
+            used_pidxs = np.unique(indices)
+        else:
+            used_pidxs = set(indices)
+
         # Contains a pair (bidx, pidx) for every vertex in the primitive
         vert_idxs = []
         # pidx_to_bidx[pidx] will be the bidx of the vertex with that pidx (or -1 if
@@ -198,10 +205,16 @@ class BlenderPrimitive():
 
             # colors is a 2d array: [N][3 or 4]
             gltf_attr_name = 'COLOR_%d' % set_num
-            colors_raw = BinaryData.get_data_from_accessor(gltf, attributes[gltf_attr_name], cache=True)
-            colors = np.array(colors_raw, dtype=np.float32)
+            print(f'Getting color data with numpy...')
+            colors_raw = BinaryData.get_data_from_accessor(gltf, attributes[gltf_attr_name],
+                                                           cache=True, use_numpy=True)
+            if type(colors_raw) == np.ndarray:
+                colors = colors_raw
+                is_rgba = colors.shape[1] == 4
+            else:
+                colors = np.array(colors_raw, dtype=np.float32)
+                is_rgba = len(colors[0]) == 4
 
-            is_rgba = len(colors[0]) == 4
             if not is_rgba:
                 # RGB -> RGBA
                 ones = np.ones((colors.shape[0], 1))
@@ -216,7 +229,7 @@ class BlenderPrimitive():
                 col = (color[0], color[1], color[2], color[3]) # fastest this way
                 for loop in bme_verts[bidx].link_loops:
                     loop[layer] = col
-            print(f'store colors ({is_rgba and "rgba" or "rgb"}, {len(vert_idxs)} verts, {len(colors_raw)} colors): {time.perf_counter() - t}')
+            print(f'store colors ({is_rgba and "rgba" or "rgb"}, {len(vert_idxs)} verts, {colors.shape} colors): {time.perf_counter() - t} sec')
 
             set_num += 1
 
@@ -324,10 +337,13 @@ class BlenderPrimitive():
             #   2     3
             #  / \   / \
             # 0---1 4---5
-            fs = [
-                (indices[i], indices[i + 1], indices[i + 2])
+            if type(indices) == np.ndarray:
+                fs = np.reshape(indices, (len(indices)//3, 3)).tolist()
+            else:
+                fs = [
+                    (indices[i], indices[i + 1], indices[i + 2])
                 for i in range(0, len(indices), 3)
-            ]
+                ]
         elif mode == 5:
             # TRIANGLE STRIP
             # 0---2---4
