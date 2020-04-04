@@ -37,7 +37,7 @@ def color_linear_to_srgb(c):
     alpha channel is not converted.
     """
     if type(c) in (list, np.ndarray):
-        print(f'Converting colors, type={type(c)}, len={len(c)}')
+        # print(f'Converting colors, type={type(c)}, len={len(c)}')
         t = time.perf_counter()
         colors = np.array(c, np.float32) if type(c) == list else c
         if  colors.ndim > 1 and colors.shape[-1] == 4:
@@ -54,7 +54,6 @@ def color_linear_to_srgb(c):
         print(f'convert colors: {time.perf_counter() - t}')
         return result
     else:
-        print(f'Converting single color')
         if c < 0.0031308:
             return 0.0 if c < 0.0 else c * 12.92
         else:

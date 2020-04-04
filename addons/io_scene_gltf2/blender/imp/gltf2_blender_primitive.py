@@ -133,12 +133,16 @@ class BlenderPrimitive():
         # pidx_to_bidx[pidx] will be the bidx of the vertex with that pidx (or -1 if
         # unused)
         pidx_to_bidx = [-1] * len(positions)
+        if type(positions) == np.ndarray:
+            positions_list = positions.tolist()
+        else:
+            positions_list = positions
         bidx = len(bme_verts)
         if bpy.app.debug:
             used_pidxs = list(used_pidxs)
             used_pidxs.sort()
         for pidx in used_pidxs:
-            pos = gltf.loc_gltf_to_blender(positions[pidx])
+            pos = gltf.loc_gltf_to_blender(positions_list[pidx])
             if skin_idx is not None:
                 pos = skin_vert(pos, pidx)
 
@@ -181,7 +185,7 @@ class BlenderPrimitive():
 
         # Set normals
         if 'NORMAL' in attributes:
-            normals = BinaryData.get_data_from_accessor(gltf, attributes['NORMAL'], cache=True)
+            normals = BinaryData.get_data_from_accessor(gltf, attributes['NORMAL'], cache=True, use_numpy=True).tolist()
 
             if skin_idx is None:
                 for bidx, pidx in vert_idxs:
@@ -208,28 +212,47 @@ class BlenderPrimitive():
             print(f'Getting color data with numpy...')
             colors_raw = BinaryData.get_data_from_accessor(gltf, attributes[gltf_attr_name],
                                                            cache=True, use_numpy=True)
-            if type(colors_raw) == np.ndarray:
+            # colors_raw may or may not be an ndarray now, depending on
+            # whether the accessor's memory layout was amenable to a direct
+            # conversion.
+            is_rgba = len(colors_raw[0]) == 4
+            print('Vertex colors: %d indices from %d colors' % (len(vert_idxs), len(colors_raw)))
+            if len(vert_idxs) < len(colors_raw) * 0.5:
+                # we don't need most of the colors; just convert the ones we need
                 colors = colors_raw
-                is_rgba = colors.shape[1] == 4
-            else:
-                colors = np.array(colors_raw, dtype=np.float32)
                 is_rgba = len(colors[0]) == 4
+                for bidx, pidx in vert_idxs:
+                    color = colors[pidx]
+                    col = (
+                        color_linear_to_srgb(color[0]),
+                        color_linear_to_srgb(color[1]),
+                        color_linear_to_srgb(color[2]),
+                        color[3] if is_rgba else 1.0
+                    )
+                    for loop in bme_verts[bidx].link_loops:
+                        loop[layer] = col
+            else:
+                # Convert fast using numpy
+                if type(colors_raw) == np.ndarray:
+                    colors = colors_raw
+                else:
+                    colors = np.array(colors_raw, dtype=np.float32)
 
-            if not is_rgba:
-                # RGB -> RGBA
-                ones = np.ones((colors.shape[0], 1))
-                colors = np.concatenate((colors, ones), axis=1) # add alpha channel
+                if not is_rgba:
+                    # RGB -> RGBA
+                    ones = np.ones((colors.shape[0], 1))
+                    colors = np.concatenate((colors, ones), axis=1) # add alpha channel
 
-            srgb_colors = color_linear_to_srgb(colors)
-            t = time.perf_counter()
-            # This needs to be a tight loop because it runs over all vertices,
-            # which is why this code looks a little odd.
-            for bidx, pidx in vert_idxs:
-                color = srgb_colors[pidx]
-                col = (color[0], color[1], color[2], color[3]) # fastest this way
-                for loop in bme_verts[bidx].link_loops:
-                    loop[layer] = col
-            print(f'store colors ({is_rgba and "rgba" or "rgb"}, {len(vert_idxs)} verts, {colors.shape} colors): {time.perf_counter() - t} sec')
+                srgb_colors = color_linear_to_srgb(colors)
+                t = time.perf_counter()
+                # This needs to be a tight loop because it runs over all vertices,
+                # which is why this code looks a little odd.
+                for bidx, pidx in vert_idxs:
+                    color = srgb_colors[pidx]
+                    col = (color[0], color[1], color[2], color[3]) # fastest this way
+                    for loop in bme_verts[bidx].link_loops:
+                        loop[layer] = col
+                print(f'store colors ({is_rgba and "rgba" or "rgb"}, {len(vert_idxs)} verts, {colors.shape} colors): {time.perf_counter() - t} sec')
 
             set_num += 1
 
@@ -282,13 +305,13 @@ class BlenderPrimitive():
             if skin_idx is None:
                 for bidx, pidx in vert_idxs:
                     bme_verts[bidx][layer] = (
-                        gltf.loc_gltf_to_blender(positions[pidx]) +
+                        gltf.loc_gltf_to_blender(positions_list[pidx]) +
                         gltf.loc_gltf_to_blender(morph_positions[pidx])
                     )
             else:
                 for bidx, pidx in vert_idxs:
                     pos = (
-                        gltf.loc_gltf_to_blender(positions[pidx]) +
+                        gltf.loc_gltf_to_blender(positions_list[pidx]) +
                         gltf.loc_gltf_to_blender(morph_positions[pidx])
                     )
                     bme_verts[bidx][layer] = skin_vert(pos, pidx)

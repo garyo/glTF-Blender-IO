@@ -109,8 +109,9 @@ class BinaryData():
             if use_numpy and fmt_char in ('f', 'H') and \
                (not bufferView.byte_stride or bufferView.byte_stride == default_stride) and \
                not accessor.sparse and not accessor.normalized:
-                # This is no faster than the unpack_from way, but it directly
+                # This is a bit faster than the unpack_from way, and it directly
                 # returns a np.array to avoid a copy later.
+                # In fact doing this and then converting to list may still be faster.
                 if fmt_char == 'f':
                     dtype = np.dtype(np.float32).newbyteorder('<')
                 else:
@@ -118,12 +119,15 @@ class BinaryData():
                 data = np.frombuffer(buffer_data, dtype, accessor.count * component_nb, 0)
                 data.shape = (accessor.count, component_nb)
             else:
-                unpack_from = struct.Struct(fmt).unpack_from
-                data = [
-                    unpack_from(buffer_data, offset)
-                for offset in range(0, accessor.count*stride, stride)
-                ]
-
+                # iter_unpack is faster if it's dense
+                if stride == struct.calcsize(fmt):
+                    data = list(struct.iter_unpack(fmt, buffer_data))
+                else:
+                    unpack_from = struct.Struct(fmt).unpack_from
+                    data = [
+                        unpack_from(buffer_data, offset)
+                        for offset in range(0, accessor.count*stride, stride)
+                    ]
         else:
             # No buffer view; initialize to zeros
             component_nb = gltf.component_nb_dict[accessor.type]
