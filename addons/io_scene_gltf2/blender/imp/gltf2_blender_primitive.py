@@ -221,6 +221,7 @@ class BlenderPrimitive():
                 # we don't need most of the colors; just convert the ones we need
                 colors = colors_raw
                 is_rgba = len(colors[0]) == 4
+                t = time.perf_counter()
                 for bidx, pidx in vert_idxs:
                     color = colors[pidx]
                     col = (
@@ -231,6 +232,7 @@ class BlenderPrimitive():
                     )
                     for loop in bme_verts[bidx].link_loops:
                         loop[layer] = col
+                print(f'store colors list ({is_rgba and "rgba" or "rgb"}, {len(vert_idxs)} verts, {len(colors)} colors): {time.perf_counter() - t} sec')
             else:
                 # Convert fast using numpy
                 if type(colors_raw) == np.ndarray:

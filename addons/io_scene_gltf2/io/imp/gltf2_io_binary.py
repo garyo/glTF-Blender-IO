@@ -106,16 +106,17 @@ class BinaryData():
 
             # Decode
             print(f'get_data_from_accessor_obj: use_numpy={use_numpy}, count={accessor.count}x{component_nb}, fmt={fmt}, {component_nb} comp, stride={stride}, sparse={accessor.sparse}, norm={accessor.normalized}')
-            if use_numpy and fmt_char in ('f', 'H') and \
+            if use_numpy and fmt_char in ('f', 'h', 'H', 'I') and \
                (not bufferView.byte_stride or bufferView.byte_stride == default_stride) and \
                not accessor.sparse and not accessor.normalized:
                 # This is a bit faster than the unpack_from way, and it directly
                 # returns a np.array to avoid a copy later.
                 # In fact doing this and then converting to list may still be faster.
-                if fmt_char == 'f':
-                    dtype = np.dtype(np.float32).newbyteorder('<')
-                else:
-                    dtype = np.dtype(np.uint16).newbyteorder('<')
+                dtype = {'f': np.float32,
+                         'h': np.int16,
+                         'H': np.uint16,
+                         'I': np.uint32}[fmt_char]
+                dtype = np.dtype(dtype).newbyteorder('<')
                 data = np.frombuffer(buffer_data, dtype, accessor.count * component_nb, 0)
                 data.shape = (accessor.count, component_nb)
             else:
